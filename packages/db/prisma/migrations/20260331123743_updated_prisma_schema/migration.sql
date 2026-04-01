@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "applications_user_id_organization_id_company_name_application_d" RENAME TO "applications_user_id_organization_id_company_name_applicati_key";

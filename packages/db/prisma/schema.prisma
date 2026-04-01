@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ApplicationStatus {
+  APPLIED
+  UNDER_REVIEW
+  INTERVIEWING
+  OFFERED
+  REJECTED
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  LEFT
+  BANNED
+}
+
+model User {
+  id                   Int                      @id @default(autoincrement())
+  email                String                   @unique
+  hashedPassword       String                   @map("hashed_password")
+  fullName             String?                  @map("full_name")
+  username             String?                  @unique
+  role                 Role                     @default(USER)
+  bio                  String?
+  photo                String?
+  certifications       String[]                 @default([])
+  jobRole              String?                  @map("job_role")
+  isBanned             Boolean                  @default(false) @map("is_banned")
+  bannedAt             DateTime?                @map("banned_at")
+  bannedBySuperAdminId Int?                     @map("banned_by_super_admin_id")
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+  bannedBySuperAdmin   SuperAdmin?              @relation("SuperAdminBannedUsers", fields: [bannedBySuperAdminId], references: [id])
+  memberships          OrganizationMembership[]
+  applications         Application[]
+  streaks              Streak[]
+
+  @@index([bannedBySuperAdminId])
+  @@map("users")
+}
+
+// One row represents an organization together with its primary admin account.
+model OrgAdmin {
+  id                   Int                      @id @default(autoincrement())
+  email           String                   @unique
+  hashedPassword       String                   @map("hashed_password")
+  organizationName     String                   @map("organization_name")
+  organizationBio      String?                  @map("organization_bio")
+  organizationLogo     String?                  @map("organization_logo")
+  inviteCode           String                   @unique @map("invite_code")
+  isActive             Boolean                  @default(true) @map("is_active")
+  isBanned             Boolean                  @default(false) @map("is_banned")
+  bannedAt             DateTime?                @map("banned_at")
+  bannedBySuperAdminId Int?                     @map("banned_by_super_admin_id")
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+  role                 Role                     @default(ADMIN)
+  bannedBySuperAdmin   SuperAdmin?              @relation("SuperAdminBannedOrganizations", fields: [bannedBySuperAdminId], references: [id])
+  memberships          OrganizationMembership[]
+  applications         Application[]
+  streaks              Streak[]
+
+  @@index([bannedBySuperAdminId])
+  @@map("org_admins")
+}
+
+model SuperAdmin {
+  id                  Int        @id @default(autoincrement())
+  email               String     @unique
+  hashedPassword      String     @map("hashed_password")
+  fullName            String?    @map("full_name")
+  createdAt           DateTime   @default(now()) @map("created_at")
+  updatedAt           DateTime   @updatedAt @map("updated_at")
+  role                Role       @default(SUPER_ADMIN)
+  bannedUsers         User[]     @relation("SuperAdminBannedUsers")
+  bannedOrganizations OrgAdmin[] @relation("SuperAdminBannedOrganizations")
+
+  @@map("super_admins")
+}
+
+// Users join organizations by invite code, then OrgAdmin validates the membership.
+model OrganizationMembership {
+  id             Int              @id @default(autoincrement())
+  userId         Int              @map("user_id")
+  organizationId Int              @map("organization_id")
+  inviteCodeUsed String?          @map("invite_code_used")
+  requestedAt    DateTime         @default(now()) @map("requested_at")
+  joinedAt       DateTime?        @map("joined_at")
+  validatedAt    DateTime?        @map("validated_at")
+  bannedAt       DateTime?        @map("banned_at")
+  status         MembershipStatus @default(PENDING)
+  user           User             @relation(fields: [userId], references: [id])
+  organization   OrgAdmin         @relation(fields: [organizationId], references: [id])
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([status])
+  @@map("organization_memberships")
+}
+
+model Application {
+  id              Int               @id @default(autoincrement())
+  userId          Int               @map("user_id")
+  organizationId  Int               @map("organization_id")
+  companyName     String            @map("company_name")
+  roleApplied     String            @map("role_applied")
+  applicationDate DateTime          @map("application_date")
+  notes           String?
+  resume          String
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  status          ApplicationStatus @default(APPLIED)
+  user            User              @relation(fields: [userId], references: [id])
+  organization    OrgAdmin          @relation(fields: [organizationId], references: [id])
+
+  @@unique([userId, organizationId, companyName, applicationDate])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([status])
+  @@map("applications")
+}
+
+model Streak {
+  id               String    @id @default(uuid())
+  userId           Int       @map("user_id")
+  organizationId   Int       @map("organization_id")
+  currentStreak    Int       @default(0) @map("current_streak")
+  maxStreak        Int       @default(0) @map("max_streak")
+  lastActivityDate DateTime? @map("last_activity_date")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  user             User      @relation(fields: [userId], references: [id])
+  organization     OrgAdmin  @relation(fields: [organizationId], references: [id])
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("streaks")
+}
